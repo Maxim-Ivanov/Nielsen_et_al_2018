@@ -1,4 +1,4 @@
-drawMetagenePlot <- function(mat_list, drawCI=TRUE, x.axis=FALSE, title = "Metagene_plot", xlabel = "Intervals of interest", ylabel = "Average signal", vline = FALSE, width=NA, height=NA, units="cm", plotPDF=TRUE) {
+drawMetagenePlot <- function(mat_list, drawCI=TRUE, x.axis=FALSE, title = "Metagene_plot", xlabel = "Intervals of interest", ylabel = "Average signal", vline = FALSE, width=NA, height=NA, units="cm", plotPDF=TRUE, scale.plot=NA, linetype=0, alpha=0.25) {
   require(ggplot2)
   if (identical(x.axis, FALSE)) {
     x.axis <- seq_len(ncol(mat_list[[1]]))
@@ -7,7 +7,11 @@ drawMetagenePlot <- function(mat_list, drawCI=TRUE, x.axis=FALSE, title = "Metag
   for (i in seq(length(mat_list))) {
     curr_mat <- mat_list[[i]]
     curr_name <- names(mat_list)[[i]]
+    if (!is.na(scale.plot) && is.numeric(scale.plot)) {
+      curr_mat <- curr_mat * scale.plot[[i]]
+    }
     avg <- apply(curr_mat, 2, mean, na.rm = TRUE)
+    message("Max value ", i, " = ", max(avg)); flush.console()
     df <- data.frame("pos" = x.axis, "avg" = avg, "group" = curr_name)
     if (isTRUE(drawCI)) {
       sem <- apply(curr_mat, 2, sd, na.rm = TRUE) / sqrt(nrow(curr_mat))
@@ -18,7 +22,7 @@ drawMetagenePlot <- function(mat_list, drawCI=TRUE, x.axis=FALSE, title = "Metag
   }
   p <- ggplot(long_df, aes(x = pos, y = avg, color = group)) + geom_line(size=1) + ggtitle(title) + xlab(xlabel) + ylab(ylabel) + theme_bw()
   if (isTRUE(drawCI)) {
-    p <- p + geom_ribbon(aes(x = pos, ymin = lower, ymax = upper, fill = group), alpha = 0.1)
+    p <- p + geom_ribbon(aes(x = pos, ymin = lower, ymax = upper, fill = group), alpha = alpha, linetype = linetype)
   }
   if (is.numeric(vline)) {
     p <- p + geom_vline(xintercept = vline)

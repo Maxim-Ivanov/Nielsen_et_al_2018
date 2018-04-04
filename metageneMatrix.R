@@ -1,18 +1,18 @@
 # The intervals are expected to be stranded;
 # The signal can be either stranded (e.g. NET-Seq) or unstranded (e.g. ChIP-Seq);
-# In the antisense mode (antisenseMode=TRUE) the intervals are flipped to the opposite strand;
+# In the antisense mode (antisenseMode=TRUE) the intervals are flipped to the opposite strand to investigate the antisense transcription;
 #
-# If at least one interval has a different length, then intervals can be either: a) scaled (extended or shrinked) to a certain common length (scale = TRUE), or b) remain unscaled (scale = FALSE).
+# If at least one interval has a different length, then intervals can be either: a) scaled (extended or shrinked) to a certain common length (scale = TRUE), or b) remain unscaled (scale = FALSE; default).
 # In the latter case (scale = FALSE), longer intervals are trimmed and shorter intervals are filled with NA values. The intervals can be anchored either at the start (default), or at the end (anchor = c("start", "end"));
-# In both cases it is required to determine the length of the output matrix. The matrix.length argument can be either an arbitrary number, or "max" (width of the longest interval), or "min" (width of the shortest interval), otherwise the median interval length is used;
+# In both cases it is required to determine the length of the output matrix. The matrix.length argument can be either an arbitrary number, or "max" (width of the longest interval), or "min" (width of the shortest interval), or the mean interval length (rounded to the nearest integer), otherwise the median interval length is used by default;
 #
 # na.as.zeros parameter allows to substitute NA values with zeros. By default it is FALSE, thus the output matrix may contain NA values (given that scale = FALSE). This has to be taken into account when applying statistical functions to the output matrix;
 #
 # skip.zeros parameter allows to remove intervals with zero signal (not a single tag along the whole interval);
 #
-# skip.outliers parameter allows to remove intervals with the highest signal (by default, the top 0.5% intervals are considered as potential outliers; the threshold can be changed arbitrarily). Use skip.outliers=FALSE to suppress the removal of outliers;
+# skip.outliers parameter allows to remove intervals with the highest signal (e.g. the top 0.5% intervals are considered as potential outliers with skip.outliers=0.995). By default skip.outliers=FALSE;
 #
-# equal.weights allows to normalize the integral signal over each interval to 1 (i.e. the signal magnitude is not taken into account when computing the matrix). This may be useful when the signal is expected to consist of sharp discrete peaks (e.g. 5Cap-Seq TSS), and their relative positions within intervals are of interest (whereas their heights are considered not important);
+# equal.weights allows to normalize the integral signal over each interval to 1 (i.e. intervals with low coverage and with high coverage contribute equally to the final metagene profile). This may be useful when the signal is expected to consist of sharp discrete peaks (e.g. TSS-Seq), and their relative positions within intervals are of interest (whereas their height is considered not important);
 
 calcMatrixLength <- function(inter, m.length) {
   max_width <- max(width(inter))
@@ -26,13 +26,17 @@ calcMatrixLength <- function(inter, m.length) {
       out <- max_width
     } else if (m.length == "min") {
       out <- min_width
+    } else if (m.length == "mean") {
+      out <- round(mean(width(inter)))
     } else if (m.length == "median") {
       out <- round(median(width(inter)))
     } else {
-      cat("Check matrix.length agrument!\n")
-      out <- max_width
+      message("Check the matrix.length agrument!\n")
+      flush.console()
+      out <- round(median(width(inter)))
     }
   }
+  message("Matrix length = ", out); flush.console()
   return(out)
 }
 
@@ -81,10 +85,10 @@ calcMatrix <- function(signal, intervals, strand=NA, max_w, min_w, scale, mlen, 
   numlist <- revElements(numlist, strand(intervals) == "-")
   if (max_w != min_w) {
     if (isTRUE(scale)) {
-      cat("Expanding and shrinking...\n")
+      message("Expanding and shrinking (this can be very slow)..."); flush.console()
       numlist <- lapply(numlist, expandOrShrink, mlen=mlen)
     } else {
-      cat("Trimming and filling...\n")
+      message("Trimming and filling..."); flush.console()
       numlist <- lapply(numlist, trimOrFill, mlen=mlen, anchor=anchor, na.as.zeros=na.as.zeros)
     }
   }
@@ -92,19 +96,21 @@ calcMatrix <- function(signal, intervals, strand=NA, max_w, min_w, scale, mlen, 
   return(mat)
 }
 
-metageneMatrix <- function(signal, intervals, scale = TRUE, matrix.length = "max", anchor = "start", na.as.zeros = FALSE, skip.zeros = TRUE, skip.outliers = 0.995, equal.weights = FALSE, antisenseMode = FALSE) {
+metageneMatrix <- function(signal, intervals, scale = FALSE, matrix.length = "median", anchor = "start", na.as.zeros = FALSE, skip.zeros = TRUE, skip.outliers = FALSE, equal.weights = FALSE, antisenseMode = FALSE) {
   require(GenomicRanges)
   mlen <- calcMatrixLength(inter = intervals, m.length = matrix.length)
   max_w <- max(width(intervals)); min_w <- min(width(intervals))
   if (any(strand(intervals)=="*")) {
-    message("Intervals contain unstranded records (will be considered as forward);")
+    message(sum(strand(intervals)=="*"), " out of ", length(intervals), "intervals are unstranded! * -> +")
     strand(intervals) <- ifelse(strand(intervals)=="*", "+", strand(intervals))
+    message("Unstranded intervals were changed to +;"); flush.console()
   }
   if (isTRUE(antisenseMode)) {
+    message("Intervals were flipped to the opposite strand;"); flush.console()
     strand(intervals) <- ifelse(strand(intervals)=="+", "-", "+")
   }
   if (any(strand(signal)=="*")) {
-    message("Signal contains unstranded records;")
+    message("The signal is unstranded!"); flush.console()
     mat <- calcMatrix(signal, intervals, max_w=max_w, min_w=min_w, scale=scale, mlen=mlen, anchor=anchor, na.as.zeros=na.as.zeros)
   } else {
     mat_fw <- calcMatrix(signal, intervals, strand="+", max_w=max_w, min_w=min_w, scale=scale, mlen=mlen, anchor=anchor, na.as.zeros=na.as.zeros)
@@ -120,18 +126,21 @@ metageneMatrix <- function(signal, intervals, scale = TRUE, matrix.length = "max
     if (sum(zeros) > 0) {
       mat <- mat[!zeros, ]
       gene_cov <- rowSums(mat, na.rm=TRUE)
-      cat("Skipped", sum(zeros), "intervals with zero signal;\n")
+      message("Skipped ", sum(zeros), " intervals with zero signal;")
+      flush.console()
     }
   }
   if (is.numeric(skip.outliers)) {
     q <- quantile(gene_cov, skip.outliers)
     outliers <- gene_cov > q
     mat <- mat[!outliers, ]
-    cat("Skipped", sum(outliers), "potential outliers;\n")
+    message("Skipped ", sum(outliers), " potential outliers;")
+    flush.console()
   }
   if (isTRUE(equal.weights)) {
     mat <- t(apply(mat, 1, function(x) { x / sum(x, na.rm=TRUE) }))
-    cat("All intervals were assigned equal weights;")
+    message("All intervals were assigned equal weights;")
+    flush.console()
   }
   return(mat)
 }
