@@ -12,6 +12,7 @@ source("batchReadTrackData.R")
 source("metageneMatrix.R")
 source("randomPositions.R")
 source("drawMetagenePlot.R")
+source("extractSummits.R")
 source("metagenePipeline.R")
 
 # Load the RangedSummarizedExperiment object with CAGEfightR output (see the 02-Calling_TSS_with_CAGEfightR.R pipeline):
@@ -48,13 +49,32 @@ liu_weigel_dir <- "/path/to/bedgraph/files"
 liu_weigel_filenames <- list.files(liu_weigel_dir, pattern="*bdg.gz$")
 liu_weigel_data <- suppressWarnings(batchReadTrackData(liu_weigel_filenames, liu_weigel_dir, format="bedGraph", seqinfo=seqinfo(Athaliana)))
 
+# Load ChIP-Seq data from Chen et al., 2017 (PMID 28947800):
+chen_dir <- "/path/to/bedgraph/files"
+chen_filenames <- list.files(chen_dir, pattern="bdg.gz$")
+chen_data <- suppressWarnings(batchReadTrackData(chen_filenames, chen_dir, format="bedGraph", seqinfo=seqinfo(Athaliana)))
+
+# Load DNase-Seq data from PlantDHS:
+dnase_dir <- "/path/to/bedgraph/files"
+dnase_filenames <- list.files(dnase_dir, pattern="bg$")
+dnase_data <- suppressWarnings(batchReadTrackData(dnase_filenames, dnase_dir, format="bedGraph", seqinfo=seqinfo(Athaliana)))
+
 # Load GRO-Seq data from Liu et al., 2018 (PMID 29379150):
 liu_jacobsen_dir <- "/path/to/bedgraph/files"
 liu_jacobsen_filenames <- list.files(liu_jacobsen_dir, pattern="fw_rev.bedgraph.gz$")
 liu_jacobsen_data <- suppressWarnings(batchReadTrackData(liu_jacobsen_filenames, liu_jacobsen_dir, format="bedGraph", seqinfo=seqinfo(Athaliana)))
 
 # Finally draw the metagene plots (400 bp windows were centered around the TSS summits and random positions):
+setwd(/output/folder)
+dir.create(Luo_2012_ChIP-Seq)
+dir.create(Inagaki_2017_ChIP-Seq)
+dir.create(Liu_Weigel_2016_ChIP-Seq)
+dir.create(Chen_2017_ChIP-Seq)
+dir.create(PlantDHS_DNase-Seq)
+dir.create(Liu_Jacobsen_2018_GRO-Seq)
 r1 <- suppressWarnings(metagenePipeline(signal=luo_data, intervals=grl, skip="_treat_pileup.bg.gz", out_dir="./Luo_2012_ChIP-Seq", expand=400))
 r2 <- suppressWarnings(metagenePipeline(signal=inagaki_data, intervals=grl, skip="_treat_pileup.bdg.gz", out_dir="./Inagaki_2017_ChIP-Seq", expand=400))
 r3 <- suppressWarnings(metagenePipeline(signal=liu_weigel_data, intervals=grl, skip="_treat_pileup.bdg.gz", out_dir="./Liu_Weigel_2016_ChIP-Seq", expand=400))
-r4 <- suppressWarnings(metagenePipeline(signal=liu_jacobsen_data, intervals=grl, skip="_fw_rev.bedgraph.gz", out_dir="./Liu_Jacobsen_2018_GRO-Seq", expand=400))
+r4 <- suppressWarnings(metagenePipeline(signal=chen_data, intervals=grl, skip="_treat_pileup.bdg.gz", out_dir="./Chen_2017_ChIP-Seq", expand=400))
+r5 <- suppressWarnings(metagenePipeline(signal=dnase_data, intervals=grl, skip=".bg", out_dir="./PlantDHS_DNase-Seq", expand=400))
+r6 <- suppressWarnings(metagenePipeline(signal=liu_jacobsen_data, intervals=grl, skip="_fw_rev.bedgraph.gz", out_dir="./Liu_Jacobsen_2018_GRO-Seq", expand=400))
