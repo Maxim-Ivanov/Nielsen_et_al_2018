@@ -1,3 +1,5 @@
+# This pipeline was used to make boxplots and metagene plots which were used for Figures 6 and S6
+
 # Load the required libraries:
 library(TxDb.Athaliana.BioMart.plantsmart28)
 txdb <- TxDb.Athaliana.BioMart.plantsmart28
@@ -27,6 +29,25 @@ extractSummits <- function(gr) {
   swapped <- gr
   ranges(swapped) <- mcols(gr)$thick
   return(swapped)
+}
+
+randomPositions <- function(gr, n, strand.at.random=FALSE) {
+  merged_gr <- reduce(gr)
+  widths <- width(merged_gr)
+  total_coverage <- sum(widths)
+  starts <- cumsum(widths) - widths
+  random_nums <- round(runif(n, min = 1, max = total_coverage))
+  mapping <- as.numeric(cut(random_nums, breaks = c(starts, total_coverage), include.lowest = TRUE))
+  ordered_gr <- merged_gr[mapping]
+  ordered_starts <- starts[mapping]
+  offsets <- random_nums - ordered_starts
+  abs_pos <- start(ordered_gr) + offsets - 1
+  start(ordered_gr) <- abs_pos
+  end(ordered_gr) <- abs_pos
+  if (isTRUE(strand.at.random)) {
+    strand(ordered_gr) <- sample(c("+", "-"), size = length(ordered_gr), replace = TRUE)
+  }
+  return(ordered_gr)
 }
 
 findOutOfBounds <- function(gr) {
@@ -89,40 +110,28 @@ basal_exon <- extractSummits(rowRanges(rse[mcols(rse)$txType == "exon" & mcols(r
 prom <- extractSummits(rowRanges(rse[mcols(rse)$txType == "promoter"]))
 
 # Generate random positions within exons of genes which contain either basal or FACT-specific exonic TSS:
-## i) Get names of these genes:
+# i) Get names of these genes:
 fact_genes <- unique(mcols(fact_exon)$geneID)
 basal_genes <- unique(mcols(basal_exon)$geneID)
-## ii) Extract exonic intervals belonging to these genes:
+# ii) Extract exonic intervals belonging to these genes:
 ebg <- exonsBy(txdb, by = "gene") # all Arabidopsis exons grouped by gene
 exons_fact <- reduce(unlist(ebg[names(ebg) %in% fact_genes]))
 exons_basal <- reduce(unlist(ebg[names(ebg) %in% basal_genes]))
-## Generate regularly spaced positions throughout the whole genome:
-chrom_sizes <- seqlengths(seqinfo(txdb))
-tiles <- unlist(tileGenome(chrom_sizes, tilewidth = 10))
-pos <- resize(tiles, width = 1, fix = "start")
-## Assign strand info to these positions:
-pos_fw <- pos_rev <- pos
-strand(pos_fw) <- "+"
-strand(pos_rev) <- "-"
-pos_all <- sort(c(pos_fw, pos_rev))
-## Retain only positions within exonic intervals in genes of interest:
-fact_pos <- pos_all[pos_all %over% exons_fact]
-basal_pos <- pos_all[pos_all %over% exons_basal]
-## Choose random 10K positions of each kind:
-fact_ctrl <- fact_pos[sample(1:length(fact_pos), size = 10000)]
-basal_ctrl <- basal_pos[sample(1:length(basal_pos), size = 10000)]
+# iii) Generate random positions:
+fact_ctrl <- randomPositions(exons_fact, n = 10000)
+basal_ctrl <- randomPositions(exons_basal, n = 10000)
 
 # Combine all intervals:
-all_intervals <- list("Promoter TSS" = granges(prom), "Matched control for basal TSS" = basal_ctrl, "Matched control for FACT-only TSS" = fact_ctrl,
-                      "Basal exonic TSS" = granges(basal_exon), "FACT-only exonic TSS" = granges(fact_exon))
+all_intervals <- list("Promoter TSS" = granges(prom), "Control for basal TSS" = basal_ctrl, "Control for fact-specific TSS" = fact_ctrl,
+                      "Basal TSS" = granges(basal_exon), "fact-specific TSS" = granges(fact_exon))
 
 # Define the colors:
 my_colors <- c("#00BF7D", "#E76BF3", "#00B0F6", "#F8766D", "#A3A500")
 names(my_colors) <- names(all_intervals)
 
 # Define comparisons for boxplots:
-my_comparisons <- list(c("Basal exonic TSS", "FACT-only exonic TSS"), c("Matched control for basal TSS", "Matched control for FACT-only TSS"), 
-                       c("Basal exonic TSS", "Matched control for basal TSS"), c("FACT-only exonic TSS", "Matched control for FACT-only TSS"))
+my_comparisons <- list(c("Basal TSS", "fact-specific TSS"), c("Control for basal TSS", "Control for fact-specific TSS"), 
+                       c("Basal TSS", "Control for basal TSS"), c("fact-specific TSS", "Control for fact-specific TSS"))
 
 # Define the names of subdirectories with Bedgraph files corresponding to each study:
 studies <- list("Luo2013", "Inagaki2017", "Liu2016", "Liu2018", "Chen2017", "Gomez2018", "Nasrallah2018", "Torres2018", "Yelagandula2014", 
