@@ -2,8 +2,6 @@
 library(TxDb.Athaliana.BioMart.plantsmart28)
 txdb <- TxDb.Athaliana.BioMart.plantsmart28
 library(SummarizedExperiment)
-library(BSgenome.Athaliana.TAIR.TAIR9)
-seqlevels(Athaliana) <- c("1", "2", "3", "4", "5", "Mt", "Pt")
 library(edgeR)
 library(reshape2)
 library(ggplot2)
